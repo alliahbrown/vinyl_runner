@@ -1,8 +1,8 @@
 // buttons.ts
-import { Mesh, MeshStandardMaterial } from 'three';
+import { Mesh, MeshStandardMaterial, Vector3 } from 'three';
 
 const originalColors = new Map<Mesh, number>();
-const originalPositions = new Map<Mesh, number>();
+const originalPositions = new Map<Mesh, Vector3>();
 
 export function onButtonHover(buttonMesh: Mesh) {
   const material = buttonMesh.material as MeshStandardMaterial;
@@ -30,11 +30,11 @@ export function onPowerButtonPress(powerButtonMesh: Mesh) {
   
   // Sauvegarde position originale
   if (!originalPositions.has(powerButtonMesh)) {
-    originalPositions.set(powerButtonMesh, powerButtonMesh.position.y);
+    originalPositions.set(powerButtonMesh, powerButtonMesh.position.clone());
   }
   
   // Animation d'enfoncement
-  const pressDepth = 0.3;
+  const pressDepth = 0.8;
   powerButtonMesh.position.y -= pressDepth;
   
   const material = powerButtonMesh.material as MeshStandardMaterial;
@@ -43,19 +43,29 @@ export function onPowerButtonPress(powerButtonMesh: Mesh) {
   }
 }
 
-export function onPowerButtonRelease(powerButtonMesh: Mesh) {
-  console.log('Power button released!');
+export function onButtonRelease(buttonMesh: Mesh) {
+  const originalPosition = originalPositions.get(buttonMesh);
+  if (originalPosition !== undefined) {
+    buttonMesh.position.copy(originalPosition);
+  }
+}
+
+export function onButtonPressAndRelease(buttonMesh: Mesh, duration: number = 500) {
+  console.log('Button pressed!');
   
-  // Restaure la position originale
-  const originalY = originalPositions.get(powerButtonMesh);
-  if (originalY !== undefined) {
-    powerButtonMesh.position.y = originalY;
+  // Sauvegarde position originale
+  if (!originalPositions.has(buttonMesh)) {
+    originalPositions.set(buttonMesh, buttonMesh.position.clone());
   }
   
-  // Restaure la couleur originale
-  const material = powerButtonMesh.material as MeshStandardMaterial;
-  const originalColor = originalColors.get(powerButtonMesh);
-  if (originalColor !== undefined) {
-    material.color.setHex(originalColor);
-  }
+  const originalPosition = originalPositions.get(buttonMesh)!;
+  
+  // Animation d'enfoncement
+  const pressDepth = 0.05;
+  buttonMesh.position.y = originalPosition.y - pressDepth;
+  
+  // Remonte automatiquement après duration ms
+  setTimeout(() => {
+    buttonMesh.position.copy(originalPosition);
+  }, duration);
 }
