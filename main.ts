@@ -5,6 +5,7 @@ import {
   WebGLRenderer,
   Object3D,
   Vector2,
+  Vector3,
   AmbientLight,
   Clock,
   Color,
@@ -85,57 +86,69 @@ const buttonActions = new Map<Mesh, () => void>();
 function loadData() {
   new GLTFLoader()
     .setPath('assets/models/')
-    .load('v2.glb', gltfReader);
+    .load('v3.glb', gltfReader);
 }
 
-// Change les noms des meshes dans gltfReader
 function gltfReader(gltf: GLTF) {
-  let testModel = null;
-  testModel = gltf.scene;
-  if (testModel != null) {
-    console.log("Model loaded: " + testModel);
-    scene.add(gltf.scene);
-    
-    // Récupération des meshes avec les bons noms
-    plateau_mesh = scene.getObjectByName('platter') as Mesh;
-    powerButtonMesh = scene.getObjectByName('powerButton') as Mesh;
-    button33Mesh = scene.getObjectByName('speedSelector33') as Mesh;
-    button45Mesh = scene.getObjectByName('speedSelector45') as Mesh;
-    volumeSliderMesh = scene.getObjectByName('volumeSliderMesh') as Mesh;
-    
-    // Clone des matériaux pour chaque mesh
-    [powerButtonMesh, button33Mesh, button45Mesh, volumeSliderMesh].forEach(mesh => {
-      if (mesh && mesh.material) {
-        mesh.material = (mesh.material as MeshStandardMaterial).clone();
-      }
-    });
-    
-    plateau = scene.getObjectByName('platter') as Object3D;
+  const testModel = gltf.scene;
+  if (!testModel) { console.log("Load FAILED."); return; }
 
-    // Ajoute ça :
-if (plateau_mesh && plateau_mesh.material) {
-  (plateau_mesh.material as MeshStandardMaterial).wireframe = true;
-}
+  scene.add(gltf.scene);
+  gltf.scene.updateMatrixWorld(true);
 
-plateau?.traverse((child) => {
-  if (child instanceof Mesh) {
-    (child.material as MeshStandardMaterial).wireframe = true;
+  // --- Plateau ---
+  plateau = scene.getObjectByName('platter') as Object3D;
+  plateau_mesh = scene.getObjectByName('platterMesh') as Mesh;
+  if (plateau_mesh?.material) {
+    (plateau_mesh.material as MeshStandardMaterial).wireframe = true;
   }
-});
-    // Initialisation de la platine
-    if (plateau) {
-      turntable = new Turntable(plateau);
+
+  // --- Boutons ---
+  powerButtonMesh = scene.getObjectByName('powerButtonMesh') as Mesh;
+  button33Mesh = scene.getObjectByName('speedSelector33Mesh') as Mesh;
+  button45Mesh = scene.getObjectByName('speedSelector45Mesh') as Mesh;
+  volumeSliderMesh = scene.getObjectByName('volumeButtonMesh') as Mesh;
+
+  [powerButtonMesh, button33Mesh, button45Mesh, volumeSliderMesh].forEach(mesh => {
+    if (mesh?.material) {
+      mesh.material = (mesh.material as MeshStandardMaterial).clone();
     }
-    
-    // Configuration des actions des boutons
-    buttonActions.set(powerButtonMesh, () => turntable.togglePower());
-    buttonActions.set(button33Mesh, () => turntable.setSpeed33());
-    buttonActions.set(button45Mesh, () => turntable.setSpeed45());
-    
-    console.log('All components loaded');
-  } else {
-    console.log("Load FAILED.");
+  });
+
+  // --- Bras ---
+  const armBase = scene.getObjectByName('armBase') as Object3D;
+  const armBase3 = scene.getObjectByName('armBase3') as Object3D;
+  const arm = scene.getObjectByName('arm') as Object3D;
+  const armEnd = scene.getObjectByName('armEnd') as Object3D;
+  const needle = scene.getObjectByName('needle') as Object3D;
+
+  // Pivot centré sur armBase, aligné sur son axe Y
+  const armPivot = new Object3D();
+  armBase.getWorldPosition(armPivot.position);
+  armBase.getWorldQuaternion(armPivot.quaternion);
+  scene.add(armPivot);
+
+  // Attache les éléments qui doivent tourner
+  [armBase3, arm, armEnd, needle].forEach(obj => {
+    if (obj) armPivot.attach(obj);
+  });
+
+  // --- Turntable ---
+  if (plateau) {
+    turntable = new Turntable(plateau, armPivot);
   }
+
+  // --- Actions boutons ---
+  buttonActions.set(powerButtonMesh, () => turntable.togglePower());
+  buttonActions.set(button33Mesh, () => turntable.setSpeed33());
+  buttonActions.set(button45Mesh, () => turntable.setSpeed45());
+
+  // Debug
+  (window as any).armPivot = armPivot;
+  (window as any).turntable = turntable;
+
+  console.log('All components loaded');
+  console.log('armBase position:', armPivot.position);
 }
 
 loadData();
@@ -153,10 +166,14 @@ function getButtonUnderPointer(): Mesh | null {
   raycaster.setFromCamera(pointer, camera);
   const intersects = raycaster.intersectObjects(scene.children, true);
   const validIntersects = intersects.filter(i => i.object.type !== 'GridHelper');
-  
+
+  buttonActions.set(powerButtonMesh, () => turntable.togglePower());
+  buttonActions.set(button33Mesh, () => turntable.setSpeed33());
+  buttonActions.set(button45Mesh, () => turntable.setSpeed45());
+
   if (validIntersects.length > 0) {
     const clickedObject = validIntersects[0].object as Mesh;
-    
+
     // Cherche dans tous les boutons
     for (const button of Array.from(buttonActions.keys())) {
       let current = clickedObject;
@@ -165,7 +182,7 @@ function getButtonUnderPointer(): Mesh | null {
         current = current.parent as Mesh;
       }
     }
-    
+
     // Vérifie aussi le slider
     if (volumeSliderMesh) {
       let current = clickedObject;
@@ -175,24 +192,24 @@ function getButtonUnderPointer(): Mesh | null {
       }
     }
   }
-  
+
   return null;
 }
 
 function onPointerMove(event: { clientX: number; clientY: number; }) {
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-  
+
   // Gestion du slider en cours de drag
   if (isDraggingSlider && volumeSliderMesh && turntable) {
     const newVolume = Math.round(((pointer.y + 1) / 2) * 100);
     turntable.setVolume(newVolume);
     return;
   }
-  
+
   // Détection du hover
   const foundButton = getButtonUnderPointer();
-  
+
   if (foundButton && foundButton !== hoveredButton) {
     if (hoveredButton) onButtonUnhover(hoveredButton);
     hoveredButton = foundButton;
@@ -205,7 +222,7 @@ function onPointerMove(event: { clientX: number; clientY: number; }) {
   }
 }
 import { PointLight } from 'three';  // Ajoute dans les imports
-import { Wireframe } from 'three/examples/jsm/Addons.js';
+
 
 const topLight = new PointLight(0xffffff, 100);  // Intensité 50
 topLight.position.set(0, 10, 0);
@@ -213,14 +230,14 @@ scene.add(topLight);
 
 function onPointerDown() {
   const button = getButtonUnderPointer();
-  
+  console.log('clicked:', button?.name);
   if (button) {
     if (button === volumeSliderMesh) {
       isDraggingSlider = true;
     } else {
       // Animation d'enfoncement automatique avec rebond
       onButtonPressAndRelease(button, 500);
-      
+
       // Exécute l'action immédiatement
       const action = buttonActions.get(button);
       if (action) action();
@@ -235,7 +252,7 @@ function onPointerUp() {
 function updateCameraInfo() {
   const pos = camera.position;
   const rot = camera.rotation;
-  
+
   let stateInfo = '';
   if (turntable) {
     const state = turntable.getState();
@@ -244,7 +261,7 @@ function updateCameraInfo() {
     Speed: ${state.speed} RPM<br>
     Volume: ${state.volume}%`;
   }
-  
+
   infoDiv.innerHTML = `
     <strong>Camera Position</strong><br>
     x: ${pos.x.toFixed(2)}<br>
@@ -261,14 +278,14 @@ function updateCameraInfo() {
 // Main loop
 const animation = () => {
   renderer.setAnimationLoop(animation);
-  
+
   const deltaTime = clock.getDelta();
-  
+
   // Update de la platine
   if (turntable) {
     turntable.update(deltaTime);
   }
-  
+
   updateCameraInfo();
   renderer.render(scene, camera);
 }

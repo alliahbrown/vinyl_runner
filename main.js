@@ -1,5 +1,5 @@
 "use strict";
-import { PerspectiveCamera, Scene, WebGLRenderer, Vector2, AmbientLight, Clock, Color, Raycaster, Mesh, GridHelper } from 'three';
+import { PerspectiveCamera, Scene, WebGLRenderer, Object3D, Vector2, AmbientLight, Clock, Color, Raycaster, GridHelper } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Turntable } from './turntable';
@@ -54,50 +54,61 @@ var buttonActions = new Map();
 function loadData() {
     new GLTFLoader()
         .setPath('assets/models/')
-        .load('v2.glb', gltfReader);
+        .load('v3.glb', gltfReader);
 }
-// Change les noms des meshes dans gltfReader
 function gltfReader(gltf) {
-    var testModel = null;
-    testModel = gltf.scene;
-    if (testModel != null) {
-        console.log("Model loaded: " + testModel);
-        scene.add(gltf.scene);
-        // Récupération des meshes avec les bons noms
-        plateau_mesh = scene.getObjectByName('platter');
-        powerButtonMesh = scene.getObjectByName('powerButton');
-        button33Mesh = scene.getObjectByName('speedSelector33');
-        button45Mesh = scene.getObjectByName('speedSelector45');
-        volumeSliderMesh = scene.getObjectByName('volumeSliderMesh');
-        // Clone des matériaux pour chaque mesh
-        [powerButtonMesh, button33Mesh, button45Mesh, volumeSliderMesh].forEach(function (mesh) {
-            if (mesh && mesh.material) {
-                mesh.material = mesh.material.clone();
-            }
-        });
-        plateau = scene.getObjectByName('platter');
-        // Ajoute ça :
-        if (plateau_mesh && plateau_mesh.material) {
-            plateau_mesh.material.wireframe = true;
-        }
-        plateau === null || plateau === void 0 ? void 0 : plateau.traverse(function (child) {
-            if (child instanceof Mesh) {
-                child.material.wireframe = true;
-            }
-        });
-        // Initialisation de la platine
-        if (plateau) {
-            turntable = new Turntable(plateau);
-        }
-        // Configuration des actions des boutons
-        buttonActions.set(powerButtonMesh, function () { return turntable.togglePower(); });
-        buttonActions.set(button33Mesh, function () { return turntable.setSpeed33(); });
-        buttonActions.set(button45Mesh, function () { return turntable.setSpeed45(); });
-        console.log('All components loaded');
-    }
-    else {
+    var testModel = gltf.scene;
+    if (!testModel) {
         console.log("Load FAILED.");
+        return;
     }
+    scene.add(gltf.scene);
+    gltf.scene.updateMatrixWorld(true);
+    // --- Plateau ---
+    plateau = scene.getObjectByName('platter');
+    plateau_mesh = scene.getObjectByName('platterMesh');
+    if (plateau_mesh === null || plateau_mesh === void 0 ? void 0 : plateau_mesh.material) {
+        plateau_mesh.material.wireframe = true;
+    }
+    // --- Boutons ---
+    powerButtonMesh = scene.getObjectByName('powerButtonMesh');
+    button33Mesh = scene.getObjectByName('speedSelector33Mesh');
+    button45Mesh = scene.getObjectByName('speedSelector45Mesh');
+    volumeSliderMesh = scene.getObjectByName('volumeButtonMesh');
+    [powerButtonMesh, button33Mesh, button45Mesh, volumeSliderMesh].forEach(function (mesh) {
+        if (mesh === null || mesh === void 0 ? void 0 : mesh.material) {
+            mesh.material = mesh.material.clone();
+        }
+    });
+    // --- Bras ---
+    var armBase = scene.getObjectByName('armBase');
+    var armBase3 = scene.getObjectByName('armBase3');
+    var arm = scene.getObjectByName('arm');
+    var armEnd = scene.getObjectByName('armEnd');
+    var needle = scene.getObjectByName('needle');
+    // Pivot centré sur armBase, aligné sur son axe Y
+    var armPivot = new Object3D();
+    armBase.getWorldPosition(armPivot.position);
+    armBase.getWorldQuaternion(armPivot.quaternion);
+    scene.add(armPivot);
+    // Attache les éléments qui doivent tourner
+    [armBase3, arm, armEnd, needle].forEach(function (obj) {
+        if (obj)
+            armPivot.attach(obj);
+    });
+    // --- Turntable ---
+    if (plateau) {
+        turntable = new Turntable(plateau, armPivot);
+    }
+    // --- Actions boutons ---
+    buttonActions.set(powerButtonMesh, function () { return turntable.togglePower(); });
+    buttonActions.set(button33Mesh, function () { return turntable.setSpeed33(); });
+    buttonActions.set(button45Mesh, function () { return turntable.setSpeed45(); });
+    // Debug
+    window.armPivot = armPivot;
+    window.turntable = turntable;
+    console.log('All components loaded');
+    console.log('armBase position:', armPivot.position);
 }
 loadData();
 camera.position.z = 0;
@@ -111,6 +122,9 @@ function getButtonUnderPointer() {
     raycaster.setFromCamera(pointer, camera);
     var intersects = raycaster.intersectObjects(scene.children, true);
     var validIntersects = intersects.filter(function (i) { return i.object.type !== 'GridHelper'; });
+    buttonActions.set(powerButtonMesh, function () { return turntable.togglePower(); });
+    buttonActions.set(button33Mesh, function () { return turntable.setSpeed33(); });
+    buttonActions.set(button45Mesh, function () { return turntable.setSpeed45(); });
     if (validIntersects.length > 0) {
         var clickedObject = validIntersects[0].object;
         // Cherche dans tous les boutons
@@ -165,6 +179,7 @@ topLight.position.set(0, 10, 0);
 scene.add(topLight);
 function onPointerDown() {
     var button = getButtonUnderPointer();
+    console.log('clicked:', button === null || button === void 0 ? void 0 : button.name);
     if (button) {
         if (button === volumeSliderMesh) {
             isDraggingSlider = true;
