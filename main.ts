@@ -24,6 +24,9 @@ import {
 
 import { Turntable } from './turntable';
 import { onButtonHover, onButtonUnhover, onButtonRelease, onButtonPressAndRelease } from './buttons';
+import { VinylSelector } from './vinylSelector';
+import { albums } from './album';
+import { VinylDisc } from './vinylDisc';
 
 const raycaster = new Raycaster();
 const pointer = new Vector2();
@@ -69,11 +72,14 @@ let button33Mesh: Mesh;
 let button45Mesh: Mesh;
 let volumeSliderMesh: Mesh;
 let INTERSECTED: Mesh | null = null;
-
+let vinylDisc: VinylDisc;
 const clock = new Clock();
 
 // Instance de la platine
 let turntable: Turntable;
+
+// Vinyl selector instance
+let vinylSelector: VinylSelector;
 
 // État d'interaction
 let pressedButton: Mesh | null = null;
@@ -86,7 +92,11 @@ const buttonActions = new Map<Mesh, () => void>();
 function loadData() {
   new GLTFLoader()
     .setPath('assets/models/')
-    .load('v3.glb', gltfReader);
+    .load('chambre.glb', gltfReader);
+
+
+
+
 }
 
 function gltfReader(gltf: GLTF) {
@@ -102,6 +112,13 @@ function gltfReader(gltf: GLTF) {
   if (plateau_mesh?.material) {
     (plateau_mesh.material as MeshStandardMaterial).wireframe = true;
   }
+
+
+  // --- Vinyles ---
+  vinylSelector = new VinylSelector(scene, camera, plateau, albums);
+  (window as any).vinylSelector = vinylSelector;
+
+
 
   // --- Boutons ---
   powerButtonMesh = scene.getObjectByName('powerButtonMesh') as Mesh;
@@ -133,11 +150,14 @@ function gltfReader(gltf: GLTF) {
     if (obj) armPivot.attach(obj);
   });
 
+
+  vinylDisc = new VinylDisc();
+
   // --- Turntable ---
   if (plateau) {
     turntable = new Turntable(plateau, armPivot);
   }
-
+  scene.traverse(o => { if (o.name) console.log(o.name, o.type) });
   // --- Actions boutons ---
   buttonActions.set(powerButtonMesh, () => turntable.togglePower());
   buttonActions.set(button33Mesh, () => turntable.setSpeed33());
@@ -146,20 +166,23 @@ function gltfReader(gltf: GLTF) {
   // Debug
   (window as any).armPivot = armPivot;
   (window as any).turntable = turntable;
+  (window as any).camera = camera;
+  (window as any).controls = controls;
+
 
   console.log('All components loaded');
-  console.log('armBase position:', armPivot.position);
+
 }
 
 loadData();
 
-camera.position.z = 0;
-camera.position.y = 2;
-camera.position.x = 4;
+camera.position.z = -5;
+camera.position.y = 0;
+camera.position.x = 0;
 
-camera.rotation.z = 80;
-camera.rotation.y = 50;
-camera.rotation.x = -80;
+camera.rotation.z = -90;
+camera.rotation.y = -83;
+camera.rotation.x = -90;
 
 // Détection du bouton sous le pointeur
 function getButtonUnderPointer(): Mesh | null {
@@ -206,6 +229,7 @@ function onPointerMove(event: { clientX: number; clientY: number; }) {
     turntable.setVolume(newVolume);
     return;
   }
+  if (vinylSelector) vinylSelector.onPointerMove(raycaster);
 
   // Détection du hover
   const foundButton = getButtonUnderPointer();
@@ -221,6 +245,8 @@ function onPointerMove(event: { clientX: number; clientY: number; }) {
     renderer.domElement.style.cursor = 'default';
   }
 }
+
+
 import { PointLight } from 'three';  // Ajoute dans les imports
 
 
@@ -231,6 +257,7 @@ scene.add(topLight);
 function onPointerDown() {
   const button = getButtonUnderPointer();
   console.log('clicked:', button?.name);
+  if (vinylSelector) vinylSelector.onPointerDown(raycaster, plateau_mesh);
   if (button) {
     if (button === volumeSliderMesh) {
       isDraggingSlider = true;
@@ -285,7 +312,7 @@ const animation = () => {
   if (turntable) {
     turntable.update(deltaTime);
   }
-
+  if (vinylSelector) vinylSelector.update(deltaTime);
   updateCameraInfo();
   renderer.render(scene, camera);
 }
@@ -294,6 +321,7 @@ animation();
 
 window.addEventListener('resize', onWindowResize, false);
 window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('mouseup', () => vinylSelector?.onPointerUp(raycaster, plateau_mesh, turntable, vinylDisc));
 renderer.domElement.addEventListener('mousedown', onPointerDown);
 renderer.domElement.addEventListener('mouseup', onPointerUp);
 

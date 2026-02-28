@@ -1,7 +1,7 @@
 import { Object3D, Mesh, MeshStandardMaterial } from 'three';
 
-const ARM_START_ANGLE = 0;
-const ARM_END_ANGLE = -0.4;
+const ARM_START_ANGLE = -0.40;
+const ARM_END_ANGLE = -0.7;
 const ARM_DURATION = 10;
 
 
@@ -38,11 +38,11 @@ export class Turntable {
     update(deltaTime: number) {
         if (this.isPlaying && this.plateau && this.armPivot) {
             const rotationSpeed = (this.speed / 60) * 2 * Math.PI;
-            this.plateau.rotation.y += rotationSpeed * deltaTime;
+            this.plateau.rotation.y -= rotationSpeed * deltaTime;
 
             // Bras avance vers ARM_END_ANGLE
             const armSpeed = Math.abs(ARM_END_ANGLE - ARM_START_ANGLE) / ARM_DURATION;
-            this.armPivot.rotation.y -= armSpeed * deltaTime;
+            this.armPivot.rotation.y += armSpeed * deltaTime;
             this.armPivot.rotation.y = Math.max(this.armPivot.rotation.y, ARM_END_ANGLE);
         }
     }

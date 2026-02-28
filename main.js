@@ -4,6 +4,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Turntable } from './turntable';
 import { onButtonHover, onButtonUnhover, onButtonPressAndRelease } from './buttons';
+import { VinylSelector } from './vinylSelector';
+import { albums } from './album';
+import { VinylDisc } from './vinylDisc';
 var raycaster = new Raycaster();
 var pointer = new Vector2();
 var scene = new Scene();
@@ -42,9 +45,12 @@ var button33Mesh;
 var button45Mesh;
 var volumeSliderMesh;
 var INTERSECTED = null;
+var vinylDisc;
 var clock = new Clock();
 // Instance de la platine
 var turntable;
+// Vinyl selector instance
+var vinylSelector;
 // État d'interaction
 var pressedButton = null;
 var hoveredButton = null;
@@ -54,7 +60,7 @@ var buttonActions = new Map();
 function loadData() {
     new GLTFLoader()
         .setPath('assets/models/')
-        .load('v3.glb', gltfReader);
+        .load('chambre.glb', gltfReader);
 }
 function gltfReader(gltf) {
     var testModel = gltf.scene;
@@ -70,6 +76,9 @@ function gltfReader(gltf) {
     if (plateau_mesh === null || plateau_mesh === void 0 ? void 0 : plateau_mesh.material) {
         plateau_mesh.material.wireframe = true;
     }
+    // --- Vinyles ---
+    vinylSelector = new VinylSelector(scene, camera, plateau, albums);
+    window.vinylSelector = vinylSelector;
     // --- Boutons ---
     powerButtonMesh = scene.getObjectByName('powerButtonMesh');
     button33Mesh = scene.getObjectByName('speedSelector33Mesh');
@@ -96,10 +105,13 @@ function gltfReader(gltf) {
         if (obj)
             armPivot.attach(obj);
     });
+    vinylDisc = new VinylDisc();
     // --- Turntable ---
     if (plateau) {
         turntable = new Turntable(plateau, armPivot);
     }
+    scene.traverse(function (o) { if (o.name)
+        console.log(o.name, o.type); });
     // --- Actions boutons ---
     buttonActions.set(powerButtonMesh, function () { return turntable.togglePower(); });
     buttonActions.set(button33Mesh, function () { return turntable.setSpeed33(); });
@@ -107,16 +119,17 @@ function gltfReader(gltf) {
     // Debug
     window.armPivot = armPivot;
     window.turntable = turntable;
+    window.camera = camera;
+    window.controls = controls;
     console.log('All components loaded');
-    console.log('armBase position:', armPivot.position);
 }
 loadData();
-camera.position.z = 0;
-camera.position.y = 2;
-camera.position.x = 4;
-camera.rotation.z = 80;
-camera.rotation.y = 50;
-camera.rotation.x = -80;
+camera.position.z = -5;
+camera.position.y = 0;
+camera.position.x = 0;
+camera.rotation.z = -90;
+camera.rotation.y = -83;
+camera.rotation.x = -90;
 // Détection du bouton sous le pointeur
 function getButtonUnderPointer() {
     raycaster.setFromCamera(pointer, camera);
@@ -158,6 +171,8 @@ function onPointerMove(event) {
         turntable.setVolume(newVolume);
         return;
     }
+    if (vinylSelector)
+        vinylSelector.onPointerMove(raycaster);
     // Détection du hover
     var foundButton = getButtonUnderPointer();
     if (foundButton && foundButton !== hoveredButton) {
@@ -180,6 +195,8 @@ scene.add(topLight);
 function onPointerDown() {
     var button = getButtonUnderPointer();
     console.log('clicked:', button === null || button === void 0 ? void 0 : button.name);
+    if (vinylSelector)
+        vinylSelector.onPointerDown(raycaster, plateau_mesh);
     if (button) {
         if (button === volumeSliderMesh) {
             isDraggingSlider = true;
@@ -215,12 +232,15 @@ var animation = function () {
     if (turntable) {
         turntable.update(deltaTime);
     }
+    if (vinylSelector)
+        vinylSelector.update(deltaTime);
     updateCameraInfo();
     renderer.render(scene, camera);
 };
 animation();
 window.addEventListener('resize', onWindowResize, false);
 window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('mouseup', function () { return vinylSelector === null || vinylSelector === void 0 ? void 0 : vinylSelector.onPointerUp(raycaster, plateau_mesh, turntable, vinylDisc); });
 renderer.domElement.addEventListener('mousedown', onPointerDown);
 renderer.domElement.addEventListener('mouseup', onPointerUp);
 function onWindowResize() {

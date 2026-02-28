@@ -1,5 +1,5 @@
-var ARM_START_ANGLE = 0;
-var ARM_END_ANGLE = -0.4;
+var ARM_START_ANGLE = -0.40;
+var ARM_END_ANGLE = -0.7;
 var ARM_DURATION = 10;
 var Turntable = /** @class */ (function () {
     function Turntable(plateau, armPivot) {
@@ -28,10 +28,10 @@ var Turntable = /** @class */ (function () {
     Turntable.prototype.update = function (deltaTime) {
         if (this.isPlaying && this.plateau && this.armPivot) {
             var rotationSpeed = (this.speed / 60) * 2 * Math.PI;
-            this.plateau.rotation.y += rotationSpeed * deltaTime;
+            this.plateau.rotation.y -= rotationSpeed * deltaTime;
             // Bras avance vers ARM_END_ANGLE
             var armSpeed = Math.abs(ARM_END_ANGLE - ARM_START_ANGLE) / ARM_DURATION;
-            this.armPivot.rotation.y -= armSpeed * deltaTime;
+            this.armPivot.rotation.y += armSpeed * deltaTime;
             this.armPivot.rotation.y = Math.max(this.armPivot.rotation.y, ARM_END_ANGLE);
         }
     };
