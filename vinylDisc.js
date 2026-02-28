@@ -1,13 +1,13 @@
-import { Mesh, CylinderGeometry, MeshStandardMaterial, TextureLoader } from 'three';
+import { Mesh, CylinderGeometry, MeshStandardMaterial, TextureLoader, Vector3 } from 'three';
+export var VINYL_RADIUS = 0.7; // rayon monde réel
 var VinylDisc = /** @class */ (function () {
     function VinylDisc() {
         this.isSpinning = false;
-        // Disque noir
-        var discGeo = new CylinderGeometry(0.28, 0.28, 0.01, 64);
+        this.platter = null;
+        var discGeo = new CylinderGeometry(VINYL_RADIUS, VINYL_RADIUS, 0.01, 64);
         var discMat = new MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
         this.disc = new Mesh(discGeo, discMat);
-        // Label central (pochette)
-        var labelGeo = new CylinderGeometry(0.08, 0.08, 0.011, 32);
+        var labelGeo = new CylinderGeometry(0.12, 0.12, 0.011, 32);
         var labelMat = new MeshStandardMaterial({ color: 0xff0000 });
         this.label = new Mesh(labelGeo, labelMat);
         this.disc.add(this.label);
@@ -21,23 +21,28 @@ var VinylDisc = /** @class */ (function () {
         });
     };
     VinylDisc.prototype.addToPlatter = function (platter) {
-        // Supprime l'ancien disque si existe
         this.remove();
-        // Ajoute comme enfant du platter → tourne automatiquement avec lui
-        this.disc.position.set(0, 1, 0); // juste au dessus du platter en local
+        this.platter = platter;
+        // Position monde du platter
+        var plateauPos = new Vector3();
+        platter.getWorldPosition(plateauPos);
+        // Ajoute directement à la scène parente du platter
+        // this.disc.position.set(plateauPos.x, plateauPos.y + 0.02, plateauPos.z);
+        this.disc.position.set(0.003, 0.185, 1.359);
         this.disc.rotation.set(0, 0, 0);
-        platter.add(this.disc);
+        platter.parent.add(this.disc);
         this.isSpinning = true;
     };
     VinylDisc.prototype.remove = function () {
         var _a;
         (_a = this.disc.parent) === null || _a === void 0 ? void 0 : _a.remove(this.disc);
         this.isSpinning = false;
+        this.platter = null;
     };
     VinylDisc.prototype.update = function (deltaTime, speed) {
-        if (this.isSpinning) {
-            var rotationSpeed = (speed / 60) * 2 * Math.PI;
-            this.disc.rotation.y += rotationSpeed * deltaTime;
+        if (this.isSpinning && this.platter) {
+            // Suit la rotation du platter
+            this.disc.rotation.y = this.platter.rotation.y;
         }
     };
     return VinylDisc;

@@ -18,8 +18,15 @@ export default defineConfig({
         }
     },
     build: {
-        sourcemap: true,
-        chunkSizeWarningLimit: 1024
+        chunkSizeWarningLimit: 2000, // augmente la limite à 2MB
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    three: ['three'],
+                    tween: ['@tweenjs/tween.js'],
+                }
+            }
+        }
     },
     server: {
         open: true,

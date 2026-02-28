@@ -1,29 +1,15 @@
 "use strict";
 import {
-  PerspectiveCamera,
-  Scene,
-  WebGLRenderer,
-  Object3D,
-  Vector2,
-  Vector3,
-  AmbientLight,
-  Clock,
-  Color,
-  Raycaster,
-  MeshStandardMaterial,
-  Mesh,
-  GridHelper
+  PerspectiveCamera, Scene, WebGLRenderer, Object3D,
+  Vector2, Vector3, AmbientLight, Clock, Color,
+  Raycaster, MeshStandardMaterial, Mesh, GridHelper, PointLight
 } from 'three';
-import {
-  OrbitControls
-} from 'three/addons/controls/OrbitControls.js';
-import {
-  GLTF,
-  GLTFLoader
-} from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTF, GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as TWEEN from '@tweenjs/tween.js';
 
 import { Turntable } from './turntable';
-import { onButtonHover, onButtonUnhover, onButtonRelease, onButtonPressAndRelease } from './buttons';
+import { onButtonHover, onButtonUnhover, onButtonPressAndRelease } from './buttons';
 import { VinylSelector } from './vinylSelector';
 import { albums } from './album';
 import { VinylDisc } from './vinylDisc';
@@ -31,72 +17,75 @@ import { VinylDisc } from './vinylDisc';
 const raycaster = new Raycaster();
 const pointer = new Vector2();
 const scene = new Scene();
-const aspect = window.innerWidth / window.innerHeight;
-const camera = new PerspectiveCamera(75, aspect, 0.1, 1000);
+const camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-const light = new AmbientLight(0xffffff, 3.0);
-scene.add(light);
+scene.add(new AmbientLight(0xffffff, 3.0));
 scene.background = new Color('lightgray');
 
-const renderer = new WebGLRenderer();
+const topLight = new PointLight(0xffffff, 100);
+topLight.position.set(0, 10, 0);
+scene.add(topLight);
+
+const renderer = new WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.listenToKeyEvents(window);
-controls.enableDamping = true;
+controls.enableZoom = true;
+controls.zoomSpeed = 0.5;
+controls.enableRotate = true;
+controls.rotateSpeed = 0.5;
+controls.enablePan = false;
+controls.minDistance = 1;
+controls.maxDistance = 10;
+controls.maxPolarAngle = Math.PI / 2;
+controls.enableDamping = false;
+controls.dampingFactor = 0.05;
 
-// Grille
-const gridHelper = new GridHelper(10, 10);
-gridHelper.material.transparent = true;
-gridHelper.material.opacity = 0.3;
-scene.add(gridHelper);
 
-// Info overlay
+
 const infoDiv = document.createElement('div');
-infoDiv.style.position = 'absolute';
-infoDiv.style.top = '10px';
-infoDiv.style.right = '10px';
-infoDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-infoDiv.style.color = 'white';
-infoDiv.style.padding = '10px';
-infoDiv.style.fontFamily = 'monospace';
-infoDiv.style.fontSize = '12px';
-infoDiv.style.borderRadius = '5px';
+infoDiv.style.cssText = `
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.7); color: white;
+  padding: 10px; font-family: monospace;
+  font-size: 12px; border-radius: 5px;
+`;
 document.body.appendChild(infoDiv);
 
-let plateau: Object3D | null;
+let plateau: Object3D;
 let plateau_mesh: Mesh;
 let powerButtonMesh: Mesh;
 let button33Mesh: Mesh;
 let button45Mesh: Mesh;
 let volumeSliderMesh: Mesh;
-let INTERSECTED: Mesh | null = null;
 let vinylDisc: VinylDisc;
-const clock = new Clock();
-
-// Instance de la platine
 let turntable: Turntable;
-
-// Vinyl selector instance
 let vinylSelector: VinylSelector;
-
-// État d'interaction
-let pressedButton: Mesh | null = null;
 let hoveredButton: Mesh | null = null;
-let isDraggingSlider: boolean = false;
+let isDraggingSlider = false;
 
-// Map des boutons et leurs actions
+
+// Lumières d'ambiance colorées
+const warmLight = new PointLight(0xff6633, 2, 8);  // orange chaud
+warmLight.position.set(-2, 2, -1);
+scene.add(warmLight);
+
+const coolLight = new PointLight(0x3366ff, 1.5, 8); // bleu froid
+coolLight.position.set(2, 1.5, 2);
+scene.add(coolLight);
+
+const vinylLight = new PointLight(0xff0066, 0, 3); // rose — s'allume quand musique joue
+vinylLight.position.set(0, 0.5, 0); // au dessus de la platine
+scene.add(vinylLight);
 const buttonActions = new Map<Mesh, () => void>();
+const clock = new Clock();
 
 function loadData() {
   new GLTFLoader()
     .setPath('assets/models/')
     .load('chambre.glb', gltfReader);
-
-
-
-
 }
 
 function gltfReader(gltf: GLTF) {
@@ -112,14 +101,9 @@ function gltfReader(gltf: GLTF) {
   if (plateau_mesh?.material) {
     (plateau_mesh.material as MeshStandardMaterial).wireframe = true;
   }
-
-
-  // --- Vinyles ---
-  vinylSelector = new VinylSelector(scene, camera, plateau, albums);
-  (window as any).vinylSelector = vinylSelector;
-
-
-
+  const plateauPos = new Vector3();
+  plateau.getWorldPosition(plateauPos);
+  console.log('plateauPos Y:', plateauPos.y);
   // --- Boutons ---
   powerButtonMesh = scene.getObjectByName('powerButtonMesh') as Mesh;
   button33Mesh = scene.getObjectByName('speedSelector33Mesh') as Mesh;
@@ -131,7 +115,8 @@ function gltfReader(gltf: GLTF) {
       mesh.material = (mesh.material as MeshStandardMaterial).clone();
     }
   });
-
+  console.log('platter scale:', plateau.scale);
+  console.log('platter parent scale:', plateau.parent?.scale);
   // --- Bras ---
   const armBase = scene.getObjectByName('armBase') as Object3D;
   const armBase3 = scene.getObjectByName('armBase3') as Object3D;
@@ -139,101 +124,79 @@ function gltfReader(gltf: GLTF) {
   const armEnd = scene.getObjectByName('armEnd') as Object3D;
   const needle = scene.getObjectByName('needle') as Object3D;
 
-  // Pivot centré sur armBase, aligné sur son axe Y
   const armPivot = new Object3D();
   armBase.getWorldPosition(armPivot.position);
   armBase.getWorldQuaternion(armPivot.quaternion);
   scene.add(armPivot);
 
-  // Attache les éléments qui doivent tourner
   [armBase3, arm, armEnd, needle].forEach(obj => {
     if (obj) armPivot.attach(obj);
   });
 
-
+  // --- Turntable & VinylDisc ---
+  turntable = new Turntable(plateau, armPivot);
   vinylDisc = new VinylDisc();
+  turntable.setVinylLight(vinylLight);
+  // --- VinylSelector ---
+  vinylSelector = new VinylSelector(scene, camera, plateau, albums, turntable, vinylDisc);
 
-  // --- Turntable ---
-  if (plateau) {
-    turntable = new Turntable(plateau, armPivot);
-  }
-  scene.traverse(o => { if (o.name) console.log(o.name, o.type) });
   // --- Actions boutons ---
   buttonActions.set(powerButtonMesh, () => turntable.togglePower());
   buttonActions.set(button33Mesh, () => turntable.setSpeed33());
   buttonActions.set(button45Mesh, () => turntable.setSpeed45());
 
-  // Debug
   (window as any).armPivot = armPivot;
   (window as any).turntable = turntable;
   (window as any).camera = camera;
   (window as any).controls = controls;
-
+  (window as any).vinylDisc = vinylDisc;
 
   console.log('All components loaded');
-
 }
 
 loadData();
+camera.position.set(0, 2, 4);
 
-camera.position.z = -5;
-camera.position.y = 0;
-camera.position.x = 0;
-
-camera.rotation.z = -90;
-camera.rotation.y = -83;
-camera.rotation.x = -90;
-
-// Détection du bouton sous le pointeur
 function getButtonUnderPointer(): Mesh | null {
   raycaster.setFromCamera(pointer, camera);
   const intersects = raycaster.intersectObjects(scene.children, true);
   const validIntersects = intersects.filter(i => i.object.type !== 'GridHelper');
 
-  buttonActions.set(powerButtonMesh, () => turntable.togglePower());
-  buttonActions.set(button33Mesh, () => turntable.setSpeed33());
-  buttonActions.set(button45Mesh, () => turntable.setSpeed45());
-
   if (validIntersects.length > 0) {
     const clickedObject = validIntersects[0].object as Mesh;
 
-    // Cherche dans tous les boutons
     for (const button of Array.from(buttonActions.keys())) {
-      let current = clickedObject;
+      let current: any = clickedObject;
       while (current) {
         if (current === button) return button;
-        current = current.parent as Mesh;
+        current = current.parent;
       }
     }
 
-    // Vérifie aussi le slider
     if (volumeSliderMesh) {
-      let current = clickedObject;
+      let current: any = clickedObject;
       while (current) {
         if (current === volumeSliderMesh) return volumeSliderMesh;
-        current = current.parent as Mesh;
+        current = current.parent;
       }
     }
   }
-
   return null;
 }
 
-function onPointerMove(event: { clientX: number; clientY: number; }) {
+function onPointerMove(event: { clientX: number; clientY: number }) {
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-  // Gestion du slider en cours de drag
-  if (isDraggingSlider && volumeSliderMesh && turntable) {
+  raycaster.setFromCamera(pointer, camera);
+
+  if (isDraggingSlider && turntable) {
     const newVolume = Math.round(((pointer.y + 1) / 2) * 100);
     turntable.setVolume(newVolume);
     return;
   }
-  if (vinylSelector) vinylSelector.onPointerMove(raycaster);
 
-  // Détection du hover
   const foundButton = getButtonUnderPointer();
-
   if (foundButton && foundButton !== hoveredButton) {
     if (hoveredButton) onButtonUnhover(hoveredButton);
     hoveredButton = foundButton;
@@ -246,26 +209,17 @@ function onPointerMove(event: { clientX: number; clientY: number; }) {
   }
 }
 
-
-import { PointLight } from 'three';  // Ajoute dans les imports
-
-
-const topLight = new PointLight(0xffffff, 100);  // Intensité 50
-topLight.position.set(0, 10, 0);
-scene.add(topLight);
-
 function onPointerDown() {
+  raycaster.setFromCamera(pointer, camera);
   const button = getButtonUnderPointer();
-  console.log('clicked:', button?.name);
-  if (vinylSelector) vinylSelector.onPointerDown(raycaster, plateau_mesh);
+
+  if (vinylSelector) vinylSelector.onPointerDown(raycaster);
+
   if (button) {
     if (button === volumeSliderMesh) {
       isDraggingSlider = true;
     } else {
-      // Animation d'enfoncement automatique avec rebond
       onButtonPressAndRelease(button, 500);
-
-      // Exécute l'action immédiatement
       const action = buttonActions.get(button);
       if (action) action();
     }
@@ -279,7 +233,6 @@ function onPointerUp() {
 function updateCameraInfo() {
   const pos = camera.position;
   const rot = camera.rotation;
-
   let stateInfo = '';
   if (turntable) {
     const state = turntable.getState();
@@ -288,45 +241,39 @@ function updateCameraInfo() {
     Speed: ${state.speed} RPM<br>
     Volume: ${state.volume}%`;
   }
-
   infoDiv.innerHTML = `
-    <strong>Camera Position</strong><br>
-    x: ${pos.x.toFixed(2)}<br>
-    y: ${pos.y.toFixed(2)}<br>
-    z: ${pos.z.toFixed(2)}<br>
-    <br>
-    <strong>Camera Rotation</strong><br>
-    x: ${(rot.x * 180 / Math.PI).toFixed(1)}°<br>
-    y: ${(rot.y * 180 / Math.PI).toFixed(1)}°<br>
-    z: ${(rot.z * 180 / Math.PI).toFixed(1)}°${stateInfo}
+    <strong>Camera</strong><br>
+    x: ${pos.x.toFixed(2)} y: ${pos.y.toFixed(2)} z: ${pos.z.toFixed(2)}<br>
+    rx: ${(rot.x * 180 / Math.PI).toFixed(1)}°
+    ry: ${(rot.y * 180 / Math.PI).toFixed(1)}°
+    rz: ${(rot.z * 180 / Math.PI).toFixed(1)}°
+    ${stateInfo}
   `;
 }
-
-// Main loop
+let time = 0;
 const animation = () => {
   renderer.setAnimationLoop(animation);
-
+  TWEEN.update();
   const deltaTime = clock.getDelta();
+  time += deltaTime;
 
-  // Update de la platine
-  if (turntable) {
-    turntable.update(deltaTime);
-  }
-  if (vinylSelector) vinylSelector.update(deltaTime);
+  // Légère oscillation des lumières
+  warmLight.intensity = 2 + Math.sin(time * 0.7) * 0.3;
+  coolLight.intensity = 1.5 + Math.sin(time * 0.5 + 1) * 0.2;
+
+  controls.update();
+  if (turntable) turntable.update(deltaTime);
+  if (vinylDisc && turntable) vinylDisc.update(deltaTime, turntable.getState().speed);
   updateCameraInfo();
   renderer.render(scene, camera);
-}
-
+};
 animation();
 
-window.addEventListener('resize', onWindowResize, false);
-window.addEventListener('pointermove', onPointerMove);
-window.addEventListener('mouseup', () => vinylSelector?.onPointerUp(raycaster, plateau_mesh, turntable, vinylDisc));
-renderer.domElement.addEventListener('mousedown', onPointerDown);
-renderer.domElement.addEventListener('mouseup', onPointerUp);
-
-function onWindowResize() {
+window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
+});
+window.addEventListener('pointermove', onPointerMove);
+renderer.domElement.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mouseup', onPointerUp);
