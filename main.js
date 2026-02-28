@@ -1,80 +1,234 @@
 "use strict";
-// ⚠️ DO NOT EDIT main.js DIRECTLY ⚠️
-// This file is generated from the TypeScript source main.ts
-// Any changes made here will be overwritten.
-// Import only what you need, to help your bundler optimize final code size using tree shaking
-// see https://developer.mozilla.org/en-US/docs/Glossary/Tree_shaking)
-import { PerspectiveCamera, Scene, WebGLRenderer, BoxGeometry, Mesh, MeshNormalMaterial, AmbientLight, Clock } from 'three';
-// If you prefer to import the whole library, with the THREE prefix, use the following line instead:
-// import * as THREE from 'three'
-// NOTE: three/addons alias is supported by Rollup: you can use it interchangeably with three/examples/jsm/  
-// Importing Ammo can be tricky.
-// Vite supports webassembly: https://vitejs.dev/guide/features.html#webassembly
-// so in theory this should work:
-//
-// import ammoinit from 'three/addons/libs/ammo.wasm.js?init';
-// ammoinit().then((AmmoLib) => {
-//  Ammo = AmmoLib.exports.Ammo()
-// })
-//
-// But the Ammo lib bundled with the THREE js examples does not seem to export modules properly.
-// A solution is to treat this library as a standalone file and copy it using 'vite-plugin-static-copy'.
-// See vite.config.js
-// 
-// Consider using alternatives like Oimo or cannon-es
+import { PerspectiveCamera, Scene, WebGLRenderer, Object3D, Vector2, Vector3, AmbientLight, Clock, Color, Raycaster, PointLight } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-// Example of hard link to official repo for data, if needed
-// const MODEL_PATH = 'https://raw.githubusercontent.com/mrdoob/three.js/r173/examples/models/gltf/LeePerrySmith/LeePerrySmith.glb';
-// INSERT CODE HERE
+import * as TWEEN from '@tweenjs/tween.js';
+import { Turntable } from './turntable';
+import { onButtonHover, onButtonUnhover, onButtonPressAndRelease } from './buttons';
+import { VinylSelector } from './vinylSelector';
+import { albums } from './album';
+import { VinylDisc } from './vinylDisc';
+var raycaster = new Raycaster();
+var pointer = new Vector2();
 var scene = new Scene();
-var aspect = window.innerWidth / window.innerHeight;
-var camera = new PerspectiveCamera(75, aspect, 0.1, 1000);
-var light = new AmbientLight(0xffffff, 1.0); // soft white light
-scene.add(light);
-var renderer = new WebGLRenderer();
+var camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+scene.add(new AmbientLight(0xffffff, 3.0));
+scene.background = new Color('lightgray');
+var topLight = new PointLight(0xffffff, 100);
+topLight.position.set(0, 10, 0);
+scene.add(topLight);
+var renderer = new WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 var controls = new OrbitControls(camera, renderer.domElement);
-controls.listenToKeyEvents(window); // optional
-var geometry = new BoxGeometry(1, 1, 1);
-var material = new MeshNormalMaterial();
-var cube = new Mesh(geometry, material);
-scene.add(cube);
+controls.enableZoom = true;
+controls.zoomSpeed = 0.5;
+controls.enableRotate = true;
+controls.rotateSpeed = 0.5;
+controls.enablePan = false;
+controls.minDistance = 1;
+controls.maxDistance = 10;
+controls.maxPolarAngle = Math.PI / 2;
+controls.enableDamping = false;
+controls.dampingFactor = 0.05;
+var infoDiv = document.createElement('div');
+infoDiv.style.cssText = "\n  position: absolute; top: 10px; right: 10px;\n  background: rgba(0,0,0,0.7); color: white;\n  padding: 10px; font-family: monospace;\n  font-size: 12px; border-radius: 5px;\n";
+document.body.appendChild(infoDiv);
+var plateau;
+var plateau_mesh;
+var powerButtonMesh;
+var button33Mesh;
+var button45Mesh;
+var volumeSliderMesh;
+var vinylDisc;
+var turntable;
+var vinylSelector;
+var hoveredButton = null;
+var isDraggingSlider = false;
+// Lumières d'ambiance colorées
+var warmLight = new PointLight(0xff6633, 2, 8); // orange chaud
+warmLight.position.set(-2, 2, -1);
+scene.add(warmLight);
+var coolLight = new PointLight(0x3366ff, 1.5, 8); // bleu froid
+coolLight.position.set(2, 1.5, 2);
+scene.add(coolLight);
+var vinylLight = new PointLight(0xff0066, 0, 3); // rose — s'allume quand musique joue
+vinylLight.position.set(0, 0.5, 0); // au dessus de la platine
+scene.add(vinylLight);
+var buttonActions = new Map();
+var clock = new Clock();
 function loadData() {
     new GLTFLoader()
         .setPath('assets/models/')
-        .load('test.glb', gltfReader);
+        .load('chambre.glb', gltfReader);
 }
 function gltfReader(gltf) {
-    var testModel = null;
-    testModel = gltf.scene;
-    if (testModel != null) {
-        console.log("Model loaded:  " + testModel);
-        scene.add(gltf.scene);
+    var _a;
+    var testModel = gltf.scene;
+    if (!testModel) {
+        console.log("Load FAILED.");
+        return;
     }
-    else {
-        console.log("Load FAILED.  ");
+    scene.add(gltf.scene);
+    gltf.scene.updateMatrixWorld(true);
+    // --- Plateau ---
+    plateau = scene.getObjectByName('platter');
+    plateau_mesh = scene.getObjectByName('platterMesh');
+    if (plateau_mesh === null || plateau_mesh === void 0 ? void 0 : plateau_mesh.material) {
+        plateau_mesh.material.wireframe = true;
     }
+    var plateauPos = new Vector3();
+    plateau.getWorldPosition(plateauPos);
+    console.log('plateauPos Y:', plateauPos.y);
+    // --- Boutons ---
+    powerButtonMesh = scene.getObjectByName('powerButtonMesh');
+    button33Mesh = scene.getObjectByName('speedSelector33Mesh');
+    button45Mesh = scene.getObjectByName('speedSelector45Mesh');
+    volumeSliderMesh = scene.getObjectByName('volumeButtonMesh');
+    [powerButtonMesh, button33Mesh, button45Mesh, volumeSliderMesh].forEach(function (mesh) {
+        if (mesh === null || mesh === void 0 ? void 0 : mesh.material) {
+            mesh.material = mesh.material.clone();
+        }
+    });
+    console.log('platter scale:', plateau.scale);
+    console.log('platter parent scale:', (_a = plateau.parent) === null || _a === void 0 ? void 0 : _a.scale);
+    // --- Bras ---
+    var armBase = scene.getObjectByName('armBase');
+    var armBase3 = scene.getObjectByName('armBase3');
+    var arm = scene.getObjectByName('arm');
+    var armEnd = scene.getObjectByName('armEnd');
+    var needle = scene.getObjectByName('needle');
+    var armPivot = new Object3D();
+    armBase.getWorldPosition(armPivot.position);
+    armBase.getWorldQuaternion(armPivot.quaternion);
+    scene.add(armPivot);
+    [armBase3, arm, armEnd, needle].forEach(function (obj) {
+        if (obj)
+            armPivot.attach(obj);
+    });
+    // --- Turntable & VinylDisc ---
+    turntable = new Turntable(plateau, armPivot);
+    vinylDisc = new VinylDisc();
+    turntable.setVinylLight(vinylLight);
+    // --- VinylSelector ---
+    vinylSelector = new VinylSelector(scene, camera, plateau, albums, turntable, vinylDisc);
+    // --- Actions boutons ---
+    buttonActions.set(powerButtonMesh, function () { return turntable.togglePower(); });
+    buttonActions.set(button33Mesh, function () { return turntable.setSpeed33(); });
+    buttonActions.set(button45Mesh, function () { return turntable.setSpeed45(); });
+    window.armPivot = armPivot;
+    window.turntable = turntable;
+    window.camera = camera;
+    window.controls = controls;
+    window.vinylDisc = vinylDisc;
+    console.log('All components loaded');
 }
 loadData();
-camera.position.z = 3;
-var clock = new Clock();
-// Main loop
+camera.position.set(0, 2, 4);
+function getButtonUnderPointer() {
+    raycaster.setFromCamera(pointer, camera);
+    var intersects = raycaster.intersectObjects(scene.children, true);
+    var validIntersects = intersects.filter(function (i) { return i.object.type !== 'GridHelper'; });
+    if (validIntersects.length > 0) {
+        var clickedObject = validIntersects[0].object;
+        for (var _i = 0, _a = Array.from(buttonActions.keys()); _i < _a.length; _i++) {
+            var button = _a[_i];
+            var current = clickedObject;
+            while (current) {
+                if (current === button)
+                    return button;
+                current = current.parent;
+            }
+        }
+        if (volumeSliderMesh) {
+            var current = clickedObject;
+            while (current) {
+                if (current === volumeSliderMesh)
+                    return volumeSliderMesh;
+                current = current.parent;
+            }
+        }
+    }
+    return null;
+}
+function onPointerMove(event) {
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    if (isDraggingSlider && turntable) {
+        var newVolume = Math.round(((pointer.y + 1) / 2) * 100);
+        turntable.setVolume(newVolume);
+        return;
+    }
+    var foundButton = getButtonUnderPointer();
+    if (foundButton && foundButton !== hoveredButton) {
+        if (hoveredButton)
+            onButtonUnhover(hoveredButton);
+        hoveredButton = foundButton;
+        onButtonHover(hoveredButton);
+        renderer.domElement.style.cursor = 'pointer';
+    }
+    else if (!foundButton && hoveredButton) {
+        onButtonUnhover(hoveredButton);
+        hoveredButton = null;
+        renderer.domElement.style.cursor = 'default';
+    }
+}
+function onPointerDown() {
+    raycaster.setFromCamera(pointer, camera);
+    var button = getButtonUnderPointer();
+    if (vinylSelector)
+        vinylSelector.onPointerDown(raycaster);
+    if (button) {
+        if (button === volumeSliderMesh) {
+            isDraggingSlider = true;
+        }
+        else {
+            onButtonPressAndRelease(button, 500);
+            var action = buttonActions.get(button);
+            if (action)
+                action();
+        }
+    }
+}
+function onPointerUp() {
+    isDraggingSlider = false;
+}
+function updateCameraInfo() {
+    var pos = camera.position;
+    var rot = camera.rotation;
+    var stateInfo = '';
+    if (turntable) {
+        var state = turntable.getState();
+        stateInfo = "<br><br><strong>Turntable</strong><br>\n    Power: ".concat(state.isPlaying ? 'ON' : 'OFF', "<br>\n    Speed: ").concat(state.speed, " RPM<br>\n    Volume: ").concat(state.volume, "%");
+    }
+    infoDiv.innerHTML = "\n    <strong>Camera</strong><br>\n    x: ".concat(pos.x.toFixed(2), " y: ").concat(pos.y.toFixed(2), " z: ").concat(pos.z.toFixed(2), "<br>\n    rx: ").concat((rot.x * 180 / Math.PI).toFixed(1), "\u00B0\n    ry: ").concat((rot.y * 180 / Math.PI).toFixed(1), "\u00B0\n    rz: ").concat((rot.z * 180 / Math.PI).toFixed(1), "\u00B0\n    ").concat(stateInfo, "\n  ");
+}
+var time = 0;
 var animation = function () {
-    renderer.setAnimationLoop(animation); // requestAnimationFrame() replacement, compatible with XR 
-    var delta = clock.getDelta();
-    var elapsed = clock.getElapsedTime();
-    // can be used in shaders: uniforms.u_time.value = elapsed;
-    cube.rotation.x = elapsed / 2;
-    cube.rotation.y = elapsed / 1;
+    renderer.setAnimationLoop(animation);
+    TWEEN.update();
+    var deltaTime = clock.getDelta();
+    time += deltaTime;
+    // Légère oscillation des lumières
+    warmLight.intensity = 2 + Math.sin(time * 0.7) * 0.3;
+    coolLight.intensity = 1.5 + Math.sin(time * 0.5 + 1) * 0.2;
+    controls.update();
+    if (turntable)
+        turntable.update(deltaTime);
+    if (vinylDisc && turntable)
+        vinylDisc.update(deltaTime, turntable.getState().speed);
+    updateCameraInfo();
     renderer.render(scene, camera);
 };
 animation();
-window.addEventListener('resize', onWindowResize, false);
-function onWindowResize() {
+window.addEventListener('resize', function () {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-}
+});
+window.addEventListener('pointermove', onPointerMove);
+renderer.domElement.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mouseup', onPointerUp);
 //# sourceMappingURL=main.js.map

@@ -1,4 +1,72 @@
-# three_vite_ts
+# Vinyl runner
+
+const turntableGroups = {
+  // Main structure
+  "BASE": {
+    components: ["Pieds isolants", "Chassis principal"],
+    description: "Foundation and feet"
+  },
+  
+  "PLATTER_ASSEMBLY": {
+    components: ["Plateau tournant", "Tapis de feutre", "Sélecteur de vitesse de rotation"],
+    description: "Rotating platter system"
+  },
+  
+  "TONEARM_ASSEMBLY": {
+    components: ["Bras de lecture", "Porte-cellule avec cellule", "Contrepoids", "Anti-skating"],
+    description: "Complete arm mechanism"
+  },
+  
+  "CARTRIDGE_SYSTEM": {
+    components: ["Porte-cellule avec cellule", "Réceptacle pour porte-cellule"],
+    description: "Needle and cartridge holder"
+  },
+  
+  // Control elements
+  "CONTROLS": {
+    components: ["Bouton Power", "Bouton Start/Stop", "Pitch réglable", "Sélecteur de vitesse de rotation"],
+    description: "User interface controls"
+  },
+  
+  // Additional elements
+  "LIGHTING": {
+    components: ["Lampe amovible de lecture du vinyle"],
+    description: "Optional lighting"
+  },
+  
+  "STROBOSCOPIC_SYSTEM": {
+    components: ["Points stroboscopiques", "Quartz"],
+    description: "Speed monitoring system"
+  }
+}
+```
+
+**Recommended hierarchy for Three.js:**
+```
+TURNTABLE (root)
+├── BASE
+│   ├── Feet (Pieds isolants)
+│   └── Chassis
+├── PLATTER_ASSEMBLY
+│   ├── Platter (Plateau tournant)
+│   ├── Felt mat (Tapis de feutre)
+│   └── Speed selector
+├── TONEARM_ASSEMBLY
+│   ├── Arm (Bras de lecture)
+│   ├── Counterweight (Contrepoids)
+│   ├── Anti-skating
+│   └── CARTRIDGE_SYSTEM
+│       ├── Headshell (Porte-cellule)
+│       └── Cartridge receptacle
+├── CONTROLS
+│   ├── Power button
+│   ├── Start/Stop button
+│   └── Pitch control
+└── OPTIONAL
+    ├── Lamp
+    └── Stroboscopic points
+
+    
 
 TypeScript version of https://github.com/fdoganis/three_vite 
 
