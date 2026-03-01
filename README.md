@@ -1,213 +1,173 @@
-# Vinyl runner
+# Vinyl Runner — Platine Vinyle Interactive 3D
 
-const turntableGroups = {
-  // Main structure
-  "BASE": {
-    components: ["Pieds isolants", "Chassis principal"],
-    description: "Foundation and feet"
-  },
-  
-  "PLATTER_ASSEMBLY": {
-    components: ["Plateau tournant", "Tapis de feutre", "Sélecteur de vitesse de rotation"],
-    description: "Rotating platter system"
-  },
-  
-  "TONEARM_ASSEMBLY": {
-    components: ["Bras de lecture", "Porte-cellule avec cellule", "Contrepoids", "Anti-skating"],
-    description: "Complete arm mechanism"
-  },
-  
-  "CARTRIDGE_SYSTEM": {
-    components: ["Porte-cellule avec cellule", "Réceptacle pour porte-cellule"],
-    description: "Needle and cartridge holder"
-  },
-  
-  // Control elements
-  "CONTROLS": {
-    components: ["Bouton Power", "Bouton Start/Stop", "Pitch réglable", "Sélecteur de vitesse de rotation"],
-    description: "User interface controls"
-  },
-  
-  // Additional elements
-  "LIGHTING": {
-    components: ["Lampe amovible de lecture du vinyle"],
-    description: "Optional lighting"
-  },
-  
-  "STROBOSCOPIC_SYSTEM": {
-    components: ["Points stroboscopiques", "Quartz"],
-    description: "Speed monitoring system"
-  }
-}
+> Mini-application web 3D simulant une platine vinyle dans un bureau, développée avec THREE.js.
+
+**Live demo : [vinyl-runner.github.io/vinyl_runner](https://vinyl-runner.github.io/vinyl_runner)**
+
+---
+
+## Description
+
+Vinyl Runner simule une platine vinyle dans un environnement de bureau 3D. L'utilisateur peut interagir avec la platine, choisir des albums depuis un casier à vinyles, les poser sur le plateau et écouter de la musique accompagnée d'un visualiseur audio.
+
+---
+
+## Mode d'emploi
+
+### Navigation
+
+| Action | Effet |
+|--------|-------|
+| Clic gauche + drag | Faire pivoter la caméra |
+| Molette | Zoom avant/arrière |
+| Survol | Mise en surbrillance des boutons interactifs |
+
+### Interactions avec la platine
+
+| Action | Effet |
+|--------|-------|
+| Bouton Power | Allume/éteint la platine, pose/lève le bras |
+| Bouton 33 | Change la vitesse à 33 RPM |
+| Bouton 45 | Change la vitesse à 45 RPM |
+| Casier a vinyles | Ouvre le sélecteur d'albums |
+| Fleches gauche/droite | Naviguer entre les albums |
+| Entree | Confirmer la sélection |
+| Echap | Fermer le sélecteur |
+
+### Workflow
+
+1. Cliquer sur le casier pour ouvrir le sélecteur d'albums
+2. Choisir un disque avec les fleches ou le clavier
+3. Cliquer "Poser ce vinyle" — le disque tombe sur le plateau
+4. Appuyer sur Power — le bras se pose, le plateau tourne, la musique démarre
+
+---
+
+## Difficultés rencontrées
+
+- **Pivot du bras** : l'origine du mesh dans le GLB n'était pas au bon endroit, nécessitant un ajustement de l'origine dans Blender et la création d'un `Object3D` pivot en Three.js.
+- **Taille du disque** : le plateau ayant un scale non uniforme (`0.705`), le disque enfant était automatiquement redimensionné, rendant la correspondance avec le disque animé impossible sans mesurer la bounding box réelle.
+- **Suivi de la souris en 3D** : le raycasting sur un plan horizontal donnait des résultats très éloignés selon l'angle de caméra, résolu avec une hauteur de drag fixe calculée au moment du pick.
+- **Intégration de Rapier** : tentative de physique réaliste abandonnée car trop lourde et incompatible avec la hiérarchie de scène existante.
+
+---
+
+## Fonctionnalités
+
+### Interactions
+- Raycasting pour la détection des clics sur les objets 3D
+- Hover avec mise en surbrillance des boutons (émissivité)
+- Navigation clavier dans le sélecteur d'albums
+
+### Animations (TWEEN.js)
+- Bras qui se pose sur le disque avec easing `Quadratic.InOut`
+- Bras qui avance lentement vers le centre (simulation réaliste)
+- Vinyle qui tombe sur le plateau avec effet `Bounce.Out`
+- Transitions de pochettes dans le sélecteur (fade)
+- Rotation continue du plateau et du disque
+
+### Audio
+- Chargement de fichiers MP3 locaux
+- Lecture en boucle avec contrôle du volume
+- Visualiseur audio avec Web Audio API (`AnalyserNode`) — barres de fréquences animées
+
+### Rendu
+- `WebGLRenderer` avec `antialias` et `setPixelRatio`
+- `AmbientLight` + `PointLight` pour l'éclairage
+- Lumières colorées d'ambiance avec oscillation
+- Lumière rose qui s'allume sur la platine lors de la lecture
+
+---
+
+## Architecture
+
+```
+src/
+├── main.ts            # Point d'entrée, scène, boucle d'animation
+├── turntable.ts       # Classe Turntable (plateau, bras, audio, lumière)
+├── vinylSelector.ts   # Sélecteur d'albums + modal UI
+├── vinylDisc.ts       # Disque vinyle 3D sur le plateau
+├── audioVisualizer.ts # Visualiseur audio Web Audio API
+├── buttons.ts         # Gestion hover/press des boutons 3D
+└── album.ts           # Dictionnaire des albums
 ```
 
-**Recommended hierarchy for Three.js:**
-```
-TURNTABLE (root)
-├── BASE
-│   ├── Feet (Pieds isolants)
-│   └── Chassis
-├── PLATTER_ASSEMBLY
-│   ├── Platter (Plateau tournant)
-│   ├── Felt mat (Tapis de feutre)
-│   └── Speed selector
-├── TONEARM_ASSEMBLY
-│   ├── Arm (Bras de lecture)
-│   ├── Counterweight (Contrepoids)
-│   ├── Anti-skating
-│   └── CARTRIDGE_SYSTEM
-│       ├── Headshell (Porte-cellule)
-│       └── Cartridge receptacle
-├── CONTROLS
-│   ├── Power button
-│   ├── Start/Stop button
-│   └── Pitch control
-└── OPTIONAL
-    ├── Lamp
-    └── Stroboscopic points
+### Assets 3D
+- `chambre.glb` — Scène principale (bureau, tapis, lampe, tabouret)
+- Platine vinyle intégrée — avec tous les composants nommés (platter, armBase, needle...)
+- Casier à vinyles intégré — avec 56 slots de vinyles
 
-    
-
-TypeScript version of https://github.com/fdoganis/three_vite 
-
-Requires TypeScript :
-
-```bash
-npm install -g typescript
-```
-on macOS :
-
-```bash
-sudo npm install -g typescript
-```
-
-Basic THREE.js template using [Vite](https://vitejs.dev).
-
-Allows testing and modifying [official THREE.js examples](https://threejs.org/examples/) locally, at lightning speed.
-After trying Parcel and Rollup, this is probably the most developer-friendly to start THREE.js development in 2024 : it's insanely fast, it supports live reload out of the box, while remaining simple to use and to extend.
-
-## Batteries included
-
-Pre-configured to support :
-
-- glTF file loading
-- ammo.js wasm physics library
-- VSCode launch scripts
-- **TypeScript** with THREE.js type definitions : for IntelliSense in VS Code
-- recommended VS Code extensions
-- deployment
-
-Have a look at vite.config.js and customize it to your needs (additional libraries, file formats etc.).
+---
 
 ## Installation
 
-Install [Node.js](https://nodejs.org)
-
-- Clone or download repo
-- run `npm install` : fetches and install all dependencies
-- `npm run dev` : launches a server and opens your browser in `https://localhost:5173` by default
-  - Edit your code : your changes are reflected instantly!
-- `npm run build` : packages all code and resources into the `dist` folder, ready for deployment.
-
-
-## HTTPS
-
-HTTPS is required to use the WebXR API
-
-
-### Using Cloudflare Tunnel for free without an account or a domain (recommended)
-
-  - Install [Homebrew](https://brew.sh)
-
 ```bash
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-then follow instructions
-
-
-```bash
-echo >> /Users/XXX/.zprofile
-
-echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/XXX/.zprofile
-
-eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-
-  - **[Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)**
-
-```bash
-brew install cloudflared
-```
-- run your app locally
-
-```bash
+git clone https://github.com/VOTRE_USERNAME/vinyl_runner.git
+cd vinyl_runner
+npm install
 npm run dev
 ```
 
-- run `cloudflared` tunnel
-
-```bash
-cloudflared tunnel --url http://localhost:5173/
-```
-
-This will create a random temporary address ending in `*.trycloudflare.com`
-
-You can share this address by sending a link or by generating a QR code (very useful for mobile devices and some XR headsets).
-
-### Persistent link
-
-If you want more persistence, you should register a domain name, or connect your github account to [Cloudflare Pages](https://pages.cloudflare.com) for free.
-
-Alternatively, you could simply [use GitHub Pages to host your application persistently](https://sbcode.net/threejs/github-pages/).
-
-### Tunneling alternatives
-
-Check these tunneling alternatives such as `ngrok` or `zrok` for simple personal projects, use [tunneling solutions](https://github.com/anderspitman/awesome-tunneling) 
-
-
-### Manual HTTPS setup
-
-In order to use `https`, copy your certificates to the `.cert` folder, and change the `serve` command to:
-
-`"serve": "http-server dist -S -C .cert/cert.pem -K .cert/key.pem`
-
-## Deploying the App with GitHub Pages
-
-(original: https://github.com/meta-quest/webxr-first-steps?tab=readme-ov-file#build-and-deploy)
-
-This repository includes a ready-to-use GitHub Actions workflow located at `.github/workflows/deploy.yml`, which automates both the build and deployment to GitHub Pages. Once enabled, every time you push changes to the `main` branch, a new build will automatically be deployed.
-
-#### Steps to Enable GitHub Pages Deployment:
-
-0. **IMPORTANT: Set the `base` variable** in `vite.config.js` (default name `/three_vite`) to the actual name of your repository. Your app will be deployed to https://[GITUSERNAME].github.io/[REPOSITORY_NAME] (for example https://fdoganis.github.io/three_vite)
-1. **Fork this repository** to your own GitHub account.
-2. Navigate to your forked repository’s **Settings**.
-3. Scroll down to the **Pages** section.
-4. Under **Build and Deployment**, change the **Source** to **GitHub Actions**.
-
-Once this is set, GitHub Actions will handle the build and deployment process automatically. Any time you push changes to the `main` branch, the app will be built and deployed to GitHub Pages without any additional manual steps.
-
-You can monitor the status of the deployment job or manually re-run it via the **Actions** tab in your GitHub repository.
-
-### Deploying to Your Own Hosting Solution
-
-If you prefer to host the app yourself, you’ll need to manually build the app and then deploy the generated files to your hosting provider.
-
-To generate the build, run the following command:
-
 ```bash
 npm run build
+npm run deploy
 ```
 
-This will create a `dist` folder containing the static files for the app. You can then upload these files to your hosting platform of choice.
+### Dépendances
+
+| Package | Usage |
+|---------|-------|
+| `three` | Moteur 3D |
+| `@tweenjs/tween.js` | Animations fluides |
+| `vite` | Bundler |
+| `typescript` | Typage |
+
+---
+
+## Sources & Credits
+
+### Musiques
+
+| Titre | Auteur | Licence |
+|-------|--------|---------|
+| Dolling | Cybersdf | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/deed.fr) — [Source](https://soundcloud.com/cybersdf) via [auboutdufil.com](https://www.auboutdufil.com/index.php?id=502) |
+| Lofi | Roman Rumyantsev | [Pixabay License](https://pixabay.com/fr/users/bransboynd-51721546/) |
+| Summer | prettyjohn1 | [Pixabay License](https://pixabay.com/fr/users/prettyjohn1-54616349/) |
+
+### Photos de pochettes
+
+| Pochette | Auteur | Source |
+|----------|--------|--------|
+| Dolling | landsmann | [Pexels](https://www.pexels.com/fr-fr/photo/29263620/) |
+| Lofi | Rognut | [Pexels](https://www.pexels.com/fr-fr/photo/trois-personnes-assises-sur-un-banc-marron-3154217/) |
+| Summer | Hieu Ho | [Pexels](https://www.pexels.com/fr-fr/photo/gens-personnes-individus-building-16414740/) |
+
+### Modèles 3D
+- Vinyle — [Sketchfab](https://skfb.ly/6T9Iq)
+- Tapis — [Sketchfab](_ https://skfb.ly/pwQtw)
+- Art desk — [Sketchfab](https://skfb.ly/o6QEo)
+- Casier à vinyles — [Sketchfab](https://sketchfab.com/3d-models/casier-pour-disques-253f558e4a3f4601a205a94d6e77ea25)
 
 
-# Credits
+### References
 
-- Test model (red cube) from https://github.com/cx20/gltf-test/tree/master/sampleModels/Box (CC BY License)
+- [THREE.js documentation](https://threejs.org/docs/)
+- [OrbitControls](https://threejs.org/docs/#examples/en/controls/OrbitControls)
+- [GLTFLoader](https://threejs.org/docs/#examples/en/loaders/GLTFLoader)
+- [TWEEN.js](https://github.com/tweenjs/tween.js)
+- [Web Audio API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+- [Cannon.js](https://fdoganis.github.io/slides/cannon.html)
 
-- Some very interesting features (such as github pages deployment) have been borrowed from https://github.com/meta-quest/webxr-first-steps (MIT License)
+---
 
-  - Make sure to check this excellent tutorial out!
-  - See [Deployment Instructions](https://github.com/meta-quest/webxr-first-steps?tab=readme-ov-file#build-and-deploy)
+## Licence
+
+MIT License — voir [LICENSE](./LICENSE)
+
+"Art Drafting Desk" (https://skfb.ly/o6QEo) by Raphael Escamilla is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+
+"Casier pour disques" (https://skfb.ly/pwGVN) by Antoine is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+
+"Colorful Woven Round Rug – Game-Ready 3D Model" (https://skfb.ly/pwQtw) by CHEN is licensed under CC Attribution-NonCommercial-NoDerivs (http://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+"Vinyl player" (https://skfb.ly/6T9Iq) by AlexEsfell is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
