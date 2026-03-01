@@ -1,21 +1,22 @@
+var base = location.hostname === 'localhost' ? '/' : '/vinyl_runner/';
 export var albums = [
     {
         name: 'Dolling',
-        cover: '/assets/covers/dolling.jpg',
+        cover: "".concat(base, "assets/covers/dolling.jpg"),
         vinylName: 'VINYL164_2',
-        audio: '/assets/audio/dolling.mp3'
+        audio: "".concat(base, "assets/audio/dolling.mp3")
     },
     {
         name: 'Lofi',
-        cover: '/assets/covers/lofi.jpg',
+        cover: "".concat(base, "assets/covers/lofi.jpg"),
         vinylName: 'VINYL165_3',
-        audio: '/assets/audio/lofi.mp3'
+        audio: "".concat(base, "assets/audio/lofi.mp3")
     },
     {
         name: 'Summer',
-        cover: '/assets/covers/summer.jpg',
+        cover: "".concat(base, "assets/covers/summer.jpg"),
         vinylName: 'VINYL166_4',
-        audio: '/assets/audio/summer.mp3'
+        audio: "".concat(base, "assets/audio/summer.mp3")
     },
 ];
 //# sourceMappingURL=album.js.map
