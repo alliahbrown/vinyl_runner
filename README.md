@@ -2,7 +2,7 @@
 
 > Mini-application web 3D simulant une platine vinyle dans un bureau, développée avec THREE.js.
 
-**Live demo : [vinyl-runner.github.io/vinyl_runner](https://vinyl-runner.github.io/vinyl_runner)**
+**[Live demo](https://alliahbrown.github.io/vinyl_runner/)**
 
 ---
 
