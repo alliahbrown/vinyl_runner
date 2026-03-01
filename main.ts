@@ -117,6 +117,19 @@ function gltfReader(gltf: GLTF) {
   });
   console.log('platter scale:', plateau.scale);
   console.log('platter parent scale:', plateau.parent?.scale);
+  // --- Tapis --- 
+  const carpet = scene.getObjectByName('Carpet__0');
+  if (carpet && 'material' in carpet) {
+    (carpet as any).material.color.set(0x6b7a8d);
+  }
+
+
+  // --- Box ---
+
+  const box = scene.getObjectByName('box') as Object3D;
+  if (box) {
+    box.position.y += 0.1;
+  }
   // --- Bras ---
   const armBase = scene.getObjectByName('armBase') as Object3D;
   const armBase3 = scene.getObjectByName('armBase3') as Object3D;
